@@ -133,7 +133,7 @@ export default function App() {
           <div style={{ width: 32, height: 32, borderRadius: 8, background: "linear-gradient(135deg, #06b6d4, #3b82f6)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16 }}>⬡</div>
           <div>
             <div style={{ fontWeight: 700, fontSize: "0.95rem", letterSpacing: "-0.02em" }}>
-              normalize<span style={{ color: "#06b6d4" }}>.io</span>
+              normaliz<span style={{ color: "#06b6d4" }}>.io</span>
             </div>
             <div style={{ fontSize: "0.65rem", color: "#475569", fontFamily: "monospace", letterSpacing: "0.05em" }}>API SANDBOX · v0.2.0 · rules engine</div>
           </div>
