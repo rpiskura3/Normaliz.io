@@ -1,0 +1,4 @@
+"homepage": "https://rpiskura3.github.io/normalize-contact",
+"scripts": {
+  "deploy": "gh-pages -d dist"
+}
