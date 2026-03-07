@@ -290,7 +290,7 @@ export default function App() {
           <div style={{ width: 32, height: 32, borderRadius: 8, background: "linear-gradient(135deg, #06b6d4, #3b82f6)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16 }}>⬡</div>
           <div>
             <div style={{ fontWeight: 700, fontSize: "0.95rem", letterSpacing: "-0.02em" }}>
-              normaliz<span style={{ color: "#06b6d4" }}>.io</span>
+              normalize<span style={{ color: "#06b6d4" }}>.io</span>
             </div>
             <div style={{ fontSize: "0.65rem", color: "#475569", fontFamily: "monospace", letterSpacing: "0.05em" }}>API SANDBOX · v0.3.0</div>
           </div>
@@ -302,7 +302,6 @@ export default function App() {
         </div>
       </div>
 
-<<<<<<< HEAD
       {/* Endpoint switcher */}
       <div style={{ padding: "12px 32px", borderBottom: "1px solid rgba(255,255,255,0.05)", display: "flex", alignItems: "center", gap: 12 }}>
         {Object.entries(ENDPOINTS).map(([key, val]) => (
@@ -316,14 +315,6 @@ export default function App() {
             <span style={{ fontFamily: "monospace", fontSize: "0.78rem", color: endpoint === key ? "#94a3b8" : "#334155" }}>{val.path}</span>
           </button>
         ))}
-=======
-      {/* Endpoint bar */}
-      <div style={{ padding: "12px 32px", borderBottom: "1px solid rgba(255,255,255,0.05)", display: "flex", alignItems: "center", gap: 10 }}>
-        <span style={{ background: "rgba(6,182,212,0.15)", color: "#06b6d4", fontFamily: "monospace", fontSize: "0.7rem", fontWeight: 700, padding: "3px 8px", borderRadius: 4, letterSpacing: "0.05em" }}>POST</span>
-        <span style={{ fontFamily: "monospace", fontSize: "0.8rem", color: "#64748b" }}>
-          https://api.normaliz.io<span style={{ color: "#94a3b8" }}>/v1/normalize</span>
-        </span>
->>>>>>> e31cee7dec9e5ceaa9d5e3fd4a6c2f714a52673c
       </div>
 
       {/* Body */}
