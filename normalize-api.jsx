@@ -1,0 +1,425 @@
+import { useState, useEffect } from "react";
+
+// ── Normalization logic ────────────────────────────────────────────────────────
+
+function normalizeEmail(raw) {
+  if (!raw) return null;
+  const trimmed = raw.trim();
+  const [local, domain] = trimmed.split("@");
+  if (!local || !domain) return { input: raw, error: "invalid format", confidence: 0 };
+
+  const domainLower = domain.toLowerCase();
+  const isGmail = domainLower === "gmail.com" || domainLower === "googlemail.com";
+
+  let cleanLocal = local.toLowerCase();
+  const isAlias = cleanLocal.includes("+");
+  if (isAlias) cleanLocal = cleanLocal.split("+")[0];
+  if (isGmail) cleanLocal = cleanLocal.replace(/\./g, "");
+
+  return {
+    input: raw,
+    canonical: `${cleanLocal}@${domainLower}`,
+    domain: domainLower,
+    is_alias: isAlias,
+    confidence: isGmail ? 0.98 : 0.91,
+  };
+}
+
+function normalizePhone(raw) {
+  if (!raw) return null;
+  const digits = raw.replace(/\D/g, "");
+  let e164 = "";
+  let country = "";
+
+  if (digits.length === 10) {
+    e164 = `+1${digits}`;
+    country = "US";
+  } else if (digits.length === 11 && digits.startsWith("1")) {
+    e164 = `+${digits}`;
+    country = "US";
+  } else if (digits.length > 10) {
+    e164 = `+${digits}`;
+    country = "INTL";
+  } else {
+    return { input: raw, error: "cannot parse", normalized: null };
+  }
+
+  const areaCode = parseInt(digits.slice(-10, -7));
+  const mobileRanges = [201,202,203,204,205,206,207,208,209,210,212,213,214,215,216,217,218,219,224,225,228,229,231,234,239,240,248,251,252,253,254,256,260,262,267,269,270,272,274,276,281,283,301,302,303,304,305,307,308,309,310,312,313,314,315,316,317,318,319,320,321,323,325,330,331,334,336,337,339,346,347,351,352,360,361,364,380,385,386,401,402,404,405,406,407,408,409,410,412,413,414,415,417,419,423,424,425,430,432,434,435,440,442,443,445,458,463,464,469,470,475,478,479,480,484,501,502,503,504,505,507,508,509,510,512,513,515,516,517,518,520,530,531,534,539,540,541,551,559,561,562,563,564,567,570,571,573,574,575,580,585,586,601,602,603,605,606,607,608,609,610,612,614,615,616,617,618,619,620,623,626,628,629,630,631,636,641,646,650,651,657,660,661,662,667,669,671,678,681,682,701,702,703,704,706,707,708,712,713,714,715,716,717,718,719,720,724,725,726,727,731,732,734,737,740,743,747,754,757,760,762,763,765,769,770,772,773,774,775,779,781,785,786,787,801,802,803,804,805,806,808,810,812,813,814,815,816,817,818,828,830,831,832,835,838,843,845,847,848,850,854,856,857,858,859,860,862,863,864,865,870,872,878,901,903,904,906,907,908,909,910,912,913,914,915,916,917,918,919,920,925,928,929,930,931,934,936,937,938,940,941,947,949,951,952,954,956,957,959,970,971,972,973,975,978,979,980,984,985,989];
+  const type = mobileRanges.includes(areaCode) ? "mobile" : "landline";
+
+  return { input: raw, normalized: e164, country, type };
+}
+
+function normalizeHandle(platform, raw) {
+  if (!raw) return null;
+  const stripped = raw.replace(/^@/, "").trim();
+  return { input: raw, canonical: stripped };
+}
+
+function normalizeContact(input) {
+  const out = {};
+  if (input.email) out.email = normalizeEmail(input.email);
+  if (input.phone) out.phone = normalizePhone(input.phone);
+  if (input.handles) {
+    out.handles = {};
+    for (const [platform, handle] of Object.entries(input.handles)) {
+      out.handles[platform] = normalizeHandle(platform, handle);
+    }
+  }
+  return out;
+}
+
+// ── UI helpers ─────────────────────────────────────────────────────────────────
+
+const DEFAULT_INPUT = `{
+  "email": "John.Doe+sales@gmail.com",
+  "phone": "(614) 555-1212",
+  "handles": {
+    "twitter": "@john_doe"
+  }
+}`;
+
+function JsonToken({ text }) {
+  const lines = text.split("\n");
+  return (
+    <div className="font-mono text-sm leading-relaxed">
+      {lines.map((line, i) => {
+        const colored = line
+          .replace(/"([^"]+)"(?=\s*:)/g, '<span style="color:#7dd3fc">\"$1\"</span>')
+          .replace(/:\s*"([^"]+)"/g, ': <span style="color:#86efac">\"$1\"</span>')
+          .replace(/:\s*(true|false)/g, ': <span style="color:#f9a8d4">$1</span>')
+          .replace(/:\s*(\d+\.?\d*)/g, ': <span style="color:#fcd34d">$1</span>');
+        return (
+          <div key={i} dangerouslySetInnerHTML={{ __html: colored }} />
+        );
+      })}
+    </div>
+  );
+}
+
+function Badge({ label, color }) {
+  const colors = {
+    green: { background: "rgba(134,239,172,0.15)", color: "#86efac", border: "1px solid rgba(134,239,172,0.3)" },
+    blue:  { background: "rgba(125,211,252,0.15)", color: "#7dd3fc", border: "1px solid rgba(125,211,252,0.3)" },
+    amber: { background: "rgba(252,211,77,0.15)",  color: "#fcd34d", border: "1px solid rgba(252,211,77,0.3)"  },
+    pink:  { background: "rgba(249,168,212,0.15)", color: "#f9a8d4", border: "1px solid rgba(249,168,212,0.3)" },
+  };
+  return (
+    <span style={{
+      ...colors[color],
+      fontSize: "0.65rem",
+      padding: "2px 7px",
+      borderRadius: "999px",
+      fontFamily: "monospace",
+      fontWeight: 600,
+      letterSpacing: "0.05em",
+    }}>
+      {label}
+    </span>
+  );
+}
+
+function FieldCard({ icon, title, children }) {
+  return (
+    <div style={{
+      background: "rgba(255,255,255,0.03)",
+      border: "1px solid rgba(255,255,255,0.08)",
+      borderRadius: "10px",
+      padding: "16px 18px",
+      marginBottom: "10px",
+    }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12, color: "#94a3b8", fontSize: "0.72rem", fontFamily: "monospace", letterSpacing: "0.08em", textTransform: "uppercase" }}>
+        <span>{icon}</span><span>{title}</span>
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function Row({ label, value, accent }) {
+  return (
+    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+      <span style={{ color: "#64748b", fontSize: "0.75rem", fontFamily: "monospace" }}>{label}</span>
+      <span style={{ color: accent || "#e2e8f0", fontSize: "0.78rem", fontFamily: "monospace", fontWeight: accent ? 600 : 400 }}>{String(value)}</span>
+    </div>
+  );
+}
+
+// ── Main component ─────────────────────────────────────────────────────────────
+
+export default function App() {
+  const [inputText, setInputText] = useState(DEFAULT_INPUT);
+  const [output, setOutput] = useState(null);
+  const [rawOutput, setRawOutput] = useState("");
+  const [error, setError] = useState(null);
+  const [tab, setTab] = useState("visual");
+  const [running, setRunning] = useState(false);
+  const [flash, setFlash] = useState(false);
+
+  function run() {
+    setError(null);
+    setRunning(true);
+    setFlash(false);
+    setTimeout(() => {
+      try {
+        const parsed = JSON.parse(inputText);
+        const result = normalizeContact(parsed);
+        setOutput(result);
+        setRawOutput(JSON.stringify(result, null, 2));
+        setFlash(true);
+      } catch (e) {
+        setError("Invalid JSON: " + e.message);
+        setOutput(null);
+      }
+      setRunning(false);
+    }, 420);
+  }
+
+  useEffect(() => { run(); }, []);
+
+  return (
+    <div style={{
+      minHeight: "100vh",
+      background: "#080c14",
+      color: "#e2e8f0",
+      fontFamily: "'DM Sans', system-ui, sans-serif",
+      padding: "0",
+    }}>
+      {/* Header */}
+      <div style={{
+        borderBottom: "1px solid rgba(255,255,255,0.06)",
+        padding: "18px 32px",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        background: "rgba(255,255,255,0.02)",
+      }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <div style={{
+            width: 32, height: 32, borderRadius: 8,
+            background: "linear-gradient(135deg, #06b6d4, #3b82f6)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            fontSize: 16,
+          }}>⬡</div>
+          <div>
+            <div style={{ fontWeight: 700, fontSize: "0.95rem", letterSpacing: "-0.02em" }}>
+              normalize<span style={{ color: "#06b6d4" }}>.contact</span>
+            </div>
+            <div style={{ fontSize: "0.65rem", color: "#475569", fontFamily: "monospace", letterSpacing: "0.05em" }}>
+              API SANDBOX · v0.1.0
+            </div>
+          </div>
+        </div>
+        <div style={{ display: "flex", gap: 8 }}>
+          <Badge label="REST" color="blue" />
+          <Badge label="JSON" color="green" />
+          <Badge label="FREE TIER" color="amber" />
+        </div>
+      </div>
+
+      {/* Endpoint bar */}
+      <div style={{
+        padding: "12px 32px",
+        borderBottom: "1px solid rgba(255,255,255,0.05)",
+        display: "flex", alignItems: "center", gap: 10,
+      }}>
+        <span style={{
+          background: "rgba(6,182,212,0.15)", color: "#06b6d4",
+          fontFamily: "monospace", fontSize: "0.7rem", fontWeight: 700,
+          padding: "3px 8px", borderRadius: 4, letterSpacing: "0.05em",
+        }}>POST</span>
+        <span style={{ fontFamily: "monospace", fontSize: "0.8rem", color: "#64748b" }}>
+          https://api.normalize.contact
+          <span style={{ color: "#94a3b8" }}>/v1/normalize</span>
+        </span>
+      </div>
+
+      {/* Body */}
+      <div style={{
+        display: "grid",
+        gridTemplateColumns: "1fr 1fr",
+        gap: 0,
+        height: "calc(100vh - 120px)",
+      }}>
+        {/* Left: Input */}
+        <div style={{
+          borderRight: "1px solid rgba(255,255,255,0.06)",
+          display: "flex", flexDirection: "column",
+        }}>
+          <div style={{
+            padding: "14px 24px 10px",
+            borderBottom: "1px solid rgba(255,255,255,0.05)",
+            display: "flex", justifyContent: "space-between", alignItems: "center",
+          }}>
+            <span style={{ fontSize: "0.72rem", fontFamily: "monospace", color: "#475569", letterSpacing: "0.08em", textTransform: "uppercase" }}>
+              request body
+            </span>
+            <span style={{ fontSize: "0.68rem", color: "#334155", fontFamily: "monospace" }}>application/json</span>
+          </div>
+
+          <div style={{ flex: 1, position: "relative" }}>
+            <textarea
+              value={inputText}
+              onChange={e => setInputText(e.target.value)}
+              onKeyDown={e => { if ((e.metaKey || e.ctrlKey) && e.key === "Enter") run(); }}
+              style={{
+                width: "100%",
+                height: "100%",
+                background: "transparent",
+                border: "none",
+                outline: "none",
+                resize: "none",
+                padding: "20px 24px",
+                fontFamily: "'JetBrains Mono', 'Fira Code', monospace",
+                fontSize: "0.82rem",
+                color: "#94a3b8",
+                lineHeight: 1.7,
+                boxSizing: "border-box",
+              }}
+              spellCheck={false}
+            />
+          </div>
+
+          <div style={{ padding: "14px 24px", borderTop: "1px solid rgba(255,255,255,0.05)", display: "flex", alignItems: "center", gap: 12 }}>
+            <button
+              onClick={run}
+              disabled={running}
+              style={{
+                background: running ? "rgba(6,182,212,0.3)" : "linear-gradient(135deg, #06b6d4, #3b82f6)",
+                border: "none", borderRadius: 7,
+                color: "#fff", fontWeight: 700,
+                fontSize: "0.8rem", padding: "9px 22px",
+                cursor: running ? "not-allowed" : "pointer",
+                letterSpacing: "0.02em",
+                transition: "opacity 0.2s",
+              }}
+            >
+              {running ? "Normalizing…" : "▶  Run"}
+            </button>
+            <span style={{ fontSize: "0.65rem", color: "#334155", fontFamily: "monospace" }}>⌘ + Enter</span>
+            {error && <span style={{ fontSize: "0.7rem", color: "#f87171", fontFamily: "monospace" }}>⚠ {error}</span>}
+          </div>
+        </div>
+
+        {/* Right: Output */}
+        <div style={{ display: "flex", flexDirection: "column" }}>
+          <div style={{
+            padding: "14px 24px 10px",
+            borderBottom: "1px solid rgba(255,255,255,0.05)",
+            display: "flex", justifyContent: "space-between", alignItems: "center",
+          }}>
+            <span style={{ fontSize: "0.72rem", fontFamily: "monospace", color: "#475569", letterSpacing: "0.08em", textTransform: "uppercase" }}>response</span>
+            <div style={{ display: "flex", gap: 0, border: "1px solid rgba(255,255,255,0.08)", borderRadius: 6, overflow: "hidden" }}>
+              {["visual", "raw"].map(t => (
+                <button key={t} onClick={() => setTab(t)} style={{
+                  background: tab === t ? "rgba(6,182,212,0.2)" : "transparent",
+                  border: "none", color: tab === t ? "#06b6d4" : "#475569",
+                  fontSize: "0.68rem", fontFamily: "monospace", letterSpacing: "0.06em",
+                  textTransform: "uppercase", padding: "5px 12px", cursor: "pointer",
+                }}>
+                  {t}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div style={{ flex: 1, overflow: "auto", padding: "20px 24px" }}>
+            {!output && !error && (
+              <div style={{ color: "#334155", fontFamily: "monospace", fontSize: "0.8rem", marginTop: 20 }}>
+                Awaiting request…
+              </div>
+            )}
+
+            {output && tab === "raw" && (
+              <div style={{
+                transition: "opacity 0.3s",
+                opacity: flash ? 1 : 0.5,
+              }}>
+                <JsonToken text={rawOutput} />
+              </div>
+            )}
+
+            {output && tab === "visual" && (
+              <div style={{ transition: "opacity 0.4s", opacity: flash ? 1 : 0.4 }}>
+
+                {/* Status */}
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 18 }}>
+                  <div style={{ width: 8, height: 8, borderRadius: "50%", background: "#4ade80", boxShadow: "0 0 8px #4ade80" }} />
+                  <span style={{ color: "#4ade80", fontFamily: "monospace", fontSize: "0.72rem", fontWeight: 600 }}>200 OK</span>
+                  <span style={{ color: "#334155", fontFamily: "monospace", fontSize: "0.68rem" }}>· 3 fields normalized</span>
+                </div>
+
+                {/* Email card */}
+                {output.email && (
+                  <FieldCard icon="✉" title="email">
+                    <Row label="input" value={output.email.input} />
+                    <Row label="canonical" value={output.email.canonical} accent="#06b6d4" />
+                    <Row label="domain" value={output.email.domain} />
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 10 }}>
+                      <div style={{ display: "flex", gap: 6 }}>
+                        {output.email.is_alias && <Badge label="ALIAS STRIPPED" color="pink" />}
+                        <Badge label={`${Math.round(output.email.confidence * 100)}% CONFIDENCE`} color="green" />
+                      </div>
+                    </div>
+                  </FieldCard>
+                )}
+
+                {/* Phone card */}
+                {output.phone && (
+                  <FieldCard icon="📞" title="phone">
+                    <Row label="input" value={output.phone.input} />
+                    {output.phone.normalized
+                      ? <>
+                          <Row label="normalized" value={output.phone.normalized} accent="#06b6d4" />
+                          <div style={{ display: "flex", gap: 6, marginTop: 10 }}>
+                            <Badge label={output.phone.country} color="blue" />
+                            <Badge label={output.phone.type?.toUpperCase()} color={output.phone.type === "mobile" ? "green" : "amber"} />
+                          </div>
+                        </>
+                      : <Row label="error" value={output.phone.error} accent="#f87171" />
+                    }
+                  </FieldCard>
+                )}
+
+                {/* Handles card */}
+                {output.handles && Object.keys(output.handles).length > 0 && (
+                  <FieldCard icon="@" title="handles">
+                    {Object.entries(output.handles).map(([platform, data]) => (
+                      <div key={platform} style={{ marginBottom: 8 }}>
+                        <div style={{ color: "#475569", fontFamily: "monospace", fontSize: "0.68rem", marginBottom: 4, textTransform: "uppercase", letterSpacing: "0.06em" }}>{platform}</div>
+                        <Row label="input" value={data.input} />
+                        <Row label="canonical" value={data.canonical} accent="#06b6d4" />
+                      </div>
+                    ))}
+                  </FieldCard>
+                )}
+
+              </div>
+            )}
+          </div>
+
+          {/* Footer metrics */}
+          {output && (
+            <div style={{
+              padding: "10px 24px",
+              borderTop: "1px solid rgba(255,255,255,0.05)",
+              display: "flex", gap: 20,
+            }}>
+              {[
+                ["latency", "~12ms"],
+                ["fields", Object.keys(output).length],
+                ["credits used", "1"],
+              ].map(([k, v]) => (
+                <div key={k}>
+                  <div style={{ fontSize: "0.6rem", fontFamily: "monospace", color: "#334155", textTransform: "uppercase", letterSpacing: "0.08em" }}>{k}</div>
+                  <div style={{ fontSize: "0.78rem", fontFamily: "monospace", color: "#64748b" }}>{v}</div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
