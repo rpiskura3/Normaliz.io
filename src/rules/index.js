@@ -42,10 +42,10 @@ export const PHONE_RULES = {
 
 // ── Handle rules ─────────────────────────────────────────────────────────────
 export const HANDLE_RULES = {
-  "*":         [trim, strip_at],
-  "twitter":   [trim, strip_at],
+  "*":         [trim, strip_at, lowercase],
+  "twitter":   [trim, strip_at, lowercase],
   "instagram": [trim, strip_at, lowercase],
   "tiktok":    [trim, strip_at, lowercase],
   "linkedin":  [trim, strip_at, lowercase],
-  "github":    [trim, strip_at],
+  "github":    [trim, strip_at, lowercase],
 };
