@@ -220,11 +220,43 @@ export default function App() {
                           <Row label="input"     value={output.email.input} />
                           <Row label="canonical" value={output.email.canonical} accent="#06b6d4" />
                           <Row label="domain"    value={output.email.domain} />
-                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 10 }}>
-                            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                              {output.email.is_alias && <Badge label="ALIAS STRIPPED" color="pink" />}
-                              <Badge label={`${Math.round(output.email.confidence * 100)}% CONFIDENCE`} color="green" />
+
+                          {/* Confidence bar */}
+                          <div style={{ marginTop: 12, marginBottom: 4 }}>
+                            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}>
+                              <span style={{ fontSize: "0.68rem", fontFamily: "monospace", color: "#475569" }}>confidence</span>
+                              <span style={{ fontSize: "0.72rem", fontFamily: "monospace", color: output.email.confidence >= 0.90 ? "#4ade80" : output.email.confidence >= 0.75 ? "#fcd34d" : "#f87171", fontWeight: 700 }}>
+                                {Math.round(output.email.confidence * 100)}%
+                              </span>
                             </div>
+                            <div style={{ height: 4, background: "rgba(255,255,255,0.06)", borderRadius: 2, overflow: "hidden" }}>
+                              <div style={{
+                                height: "100%", borderRadius: 2,
+                                width: `${Math.round(output.email.confidence * 100)}%`,
+                                background: output.email.confidence >= 0.90 ? "#4ade80" : output.email.confidence >= 0.75 ? "#fcd34d" : "#f87171",
+                                transition: "width 0.4s ease",
+                              }} />
+                            </div>
+                          </div>
+
+                          {/* Fuzzy corrections applied */}
+                          {output.email.corrections?.length > 0 && (
+                            <div style={{ marginTop: 10, padding: "8px 10px", background: "rgba(252,211,77,0.05)", border: "1px solid rgba(252,211,77,0.15)", borderRadius: 6 }}>
+                              <div style={{ fontSize: "0.62rem", fontFamily: "monospace", color: "#92400e", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 5 }}>⚠ fuzzy corrections applied</div>
+                              {output.email.corrections.map((c, i) => (
+                                <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 3 }}>
+                                  <span style={{ fontSize: "0.7rem", fontFamily: "monospace", color: "#78716c" }}>
+                                    {c.rule}: <span style={{ color: "#f87171" }}>{c.from}</span> → <span style={{ color: "#86efac" }}>{c.to}</span>
+                                  </span>
+                                  <span style={{ fontSize: "0.65rem", fontFamily: "monospace", color: "#78716c" }}>×{c.weight}</span>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+
+                          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 10 }}>
+                            {output.email.is_alias && <Badge label="ALIAS STRIPPED" color="pink" />}
+                            {output.email.corrections?.length > 0 && <Badge label="FUZZY CORRECTED" color="amber" />}
                           </div>
                           <RulesApplied rules={output.email.rules_applied} />
                         </>
