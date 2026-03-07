@@ -1,2 +1,0 @@
-# Normaliz.io
-Normalizes data
