@@ -6,10 +6,9 @@ export function normalizeHandle(platform, raw) {
   const context = { platform };
   const universalRules = HANDLE_RULES["*"] || [];
   const platformRules  = HANDLE_RULES[platform.toLowerCase()] || [];
-  const rules = [...universalRules, ...platformRules];
 
-  // Deduplicate: if platform has its own chain, use that; else fall back to universal
-  const rules = platformRules.length ? platformRules : universalRules;
+  // Run universal rules first, then platform-specific rules on top
+  const rules = [...universalRules, ...platformRules];
 
   const canonical = rules.reduce((val, rule) => rule(val, context), raw);
 
